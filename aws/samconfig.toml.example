@@ -1,0 +1,25 @@
+# SAM Configuration File
+# Copy this file to samconfig.toml and update the values
+
+version = 0.1
+
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "stock-analysis-app"
+s3_bucket = ""  # SAM will create this automatically on first deploy
+s3_prefix = "stock-analysis-app"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = [
+    "Environment=dev",
+    "AlphaVantageKey=YOUR_ALPHA_VANTAGE_KEY_HERE",
+    "FMPApiKey="  # Optional
+]
+image_repositories = []
+
+[default.build]
+[default.build.parameters]
+cached = true
+parallel = true

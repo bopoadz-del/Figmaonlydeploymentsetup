@@ -1,18 +1,34 @@
 /**
  * API utility functions with fallback support
- * Provides resilient API calls that fall back to Yahoo Finance when Edge Functions fail
+ * Supports both Supabase Edge Functions and AWS Lambda
  */
 
 import { projectId, publicAnonKey } from './supabase/info';
+import { apiGatewayUrl } from './aws/info';
 
-// Edge Function folder is named "server" (from /supabase/functions/server/)
-// Routes in the function are prefixed with /make-server-517ac4ba
-// So the base URL includes both the function name and the route prefix
-// NOTE: The function name comes from the FOLDER name, not the deployment slug!
-export const SERVER_URL = `https://${projectId}.supabase.co/functions/v1/server/make-server-517ac4ba`;
+// Backend configuration
+// Set REACT_APP_USE_AWS=true in .env to use AWS instead of Supabase
+const USE_AWS = process.env.REACT_APP_USE_AWS === 'true';
 
-console.log('[API] Edge Function URL:', SERVER_URL);
-console.log('[API] Project ID:', projectId);
+// Determine the server URL based on backend choice
+const SUPABASE_URL = `https://${projectId}.supabase.co/functions/v1/server/make-server-517ac4ba`;
+const AWS_URL = apiGatewayUrl;
+
+export const SERVER_URL = USE_AWS ? AWS_URL : SUPABASE_URL;
+
+console.log(`[API] Using ${USE_AWS ? 'AWS' : 'Supabase'} backend`);
+console.log('[API] Server URL:', SERVER_URL);
+
+// Get auth headers based on backend
+const getAuthHeaders = () => {
+  if (USE_AWS) {
+    // AWS Lambda with API Gateway doesn't require auth headers by default
+    return {};
+  } else {
+    // Supabase requires the anon key
+    return { 'Authorization': `Bearer ${publicAnonKey}` };
+  }
+};
 
 /**
  * Analyze a stock symbol with automatic fallback to Yahoo Finance
@@ -27,7 +43,7 @@ export async function analyzeSymbol(symbol: string) {
     const res = await fetch(
       `${SERVER_URL}/stock/${encodeURIComponent(symbol)}`,
       {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: getAuthHeaders()
       }
     );
     
@@ -119,7 +135,7 @@ export async function getPopularStocks(): Promise<string[]> {
     const res = await fetch(
       `${SERVER_URL}/stocks/popular`,
       {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: getAuthHeaders()
       }
     );
     
@@ -147,7 +163,7 @@ export async function testEdgeFunction(): Promise<{ ok: boolean; message: string
     const res = await fetch(
       `${SERVER_URL}/health`,
       {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: getAuthHeaders()
       }
     );
     

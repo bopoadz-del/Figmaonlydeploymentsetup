@@ -1,0 +1,128 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Stock Analysis Application - Migrated from Supabase to AWS
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+    Description: Environment name
+
+  AlphaVantageKey:
+    Type: String
+    NoEcho: true
+    Description: Alpha Vantage API Key
+
+  FMPApiKey:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: Financial Modeling Prep API Key (optional)
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: nodejs20.x
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        DYNAMODB_TABLE: !Ref KVStoreTable
+        ALPHA_VANTAGE_KEY: !Ref AlphaVantageKey
+        FMP_API_KEY: !Ref FMPApiKey
+        NODE_ENV: !Ref Environment
+
+Resources:
+  # DynamoDB Table for KV Store
+  KVStoreTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub ${AWS::StackName}-kv-store
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: key
+          AttributeType: S
+      KeySchema:
+        - AttributeName: key
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: StockAnalysis
+
+  # Lambda Function
+  StockAnalysisFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-server
+      CodeUri: lambda/
+      Handler: index.handler
+      Description: Stock Analysis API - Migrated from Supabase Edge Functions
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref KVStoreTable
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+            ApiId: !Ref HttpApi
+        RootApiEvent:
+          Type: HttpApi
+          Properties:
+            Path: /
+            Method: ANY
+            ApiId: !Ref HttpApi
+
+  # HTTP API Gateway
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Environment
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowHeaders:
+          - "*"
+        AllowMethods:
+          - GET
+          - POST
+          - DELETE
+          - OPTIONS
+        MaxAge: 600
+
+  # CloudWatch Log Group
+  FunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${StockAnalysisFunction}
+      RetentionInDays: 7
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/
+    Export:
+      Name: !Sub ${AWS::StackName}-ApiEndpoint
+
+  DynamoDBTableName:
+    Description: DynamoDB table name
+    Value: !Ref KVStoreTable
+    Export:
+      Name: !Sub ${AWS::StackName}-TableName
+
+  LambdaFunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt StockAnalysisFunction.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-FunctionArn
